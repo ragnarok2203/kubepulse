@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block title %}SLO & Error Budget | KubePulse SRE{% endblock %}
+{% block page_name %}SLO & Error Budget Tracker{% endblock %}
+
+{% block content %}
+<!-- Google SRE Banner -->
+<div class="glass-panel mb-4">
+    <div class="panel-header">
+        <div class="panel-title">
+            <i class="bi bi-book-half text-amber"></i>
+            <span>Google SRE Multi-Window Multi-Burn-Rate Architecture (Workbook Ch. 5)</span>
+        </div>
+        <span class="badge badge-outline-cyan">Rolling 30-Day Window (720 Hours)</span>
+    </div>
+    <div class="panel-body">
+        <div class="sre-equation-grid">
+            <div class="equation-box">
+                <span class="equation-title">Service Level Objective (SLO)</span>
+                <strong class="equation-formula text-cyan">SLI &ge; 99.90%</strong>
+                <p class="equation-desc">Availability Target over rolling 30-day sliding window.</p>
+            </div>
+            <div class="equation-box">
+                <span class="equation-title">Total Allowed Error Budget</span>
+                <strong class="equation-formula text-emerald">Budget = 0.100%</strong>
+                <p class="equation-desc">Max tolerable unreliability: 1 failure per 1,000 valid user requests.</p>
+            </div>
+            <div class="equation-box">
+                <span class="equation-title">Critical Pager Threshold (1h)</span>
+                <strong class="equation-formula text-crimson">Burn Rate &ge; 14.4x</strong>
+                <p class="equation-desc">Burns 2% of 30-day budget in 1 hour. Immediate on-call escalation.</p>
+            </div>
+            <div class="equation-box">
+                <span class="equation-title">Warning Ticket Threshold (6h)</span>
+                <strong class="equation-formula text-amber">Burn Rate &ge; 6.0x</strong>
+                <p class="equation-desc">Burns 5% of 30-day budget in 6 hours. High priority JIRA ticket.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Active SLO Metrics Grid -->
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="kpi-header">
+            <span class="kpi-title">Current Availability SLI</span>
+            <span class="kpi-icon text-cyan"><i class="bi bi-shield-check"></i></span>
+        </div>
+        <div class="kpi-value-row">
+            <span class="kpi-value text-cyan" id="slo-current-avail">{{ slo.current_availability }}%</span>
+            <span class="badge badge-emerald">SLO: 99.90%</span>
+        </div>
+        <div class="kpi-subtext">
+            <span>Observed Error Rate: <strong id="slo-error-rate">{{ slo.instant_error_rate }}%</strong></span>
+        </div>
+    </div>
+
+    <div class="kpi-card">
+        <div class="kpi-header">
+            <span class="kpi-title">Error Budget Remaining</span>
+            <span class="kpi-icon text-emerald"><i class="bi bi-pie-chart"></i></span>
+        </div>
+        <div class="kpi-value-row">
+            <span class="kpi-value text-emerald" id="slo-budget-rem">{{ slo.remaining_budget_percent }}%</span>
+            <span class="badge badge-soft-emerald">Consumed: {{ slo.budget_consumed_percent }}%</span>
+        </div>
+        <div class="kpi-subtext">
+            <span>Time to Depletion: <strong id="slo-exhaust-time" class="text-amber">{{ slo.time_to_exhaustion }}</strong></span>
+        </div>
+    </div>
+
+    <div class="kpi-card">
+        <div class="kpi-header">
+            <span class="kpi-title">1-Hour Fast Burn Rate</span>
+            <span class="kpi-icon text-crimson"><i class="bi bi-fire"></i></span>
+        </div>
+        <div class="kpi-value-row">
+            <span class="kpi-value text-crimson" id="slo-burn-1h">{{ slo.burn_rate_1h }}x</span>
+            <span class="badge badge-outline-crimson">Pager: &ge;14.4x</span>
+        </div>
+        <div class="kpi-subtext">
+            <span>Burns 2% of budget in 1 hour if sustained</span>
+        </div>
+    </div>
+
+    <div class="kpi-card">
+        <div class="kpi-header">
+            <span class="kpi-title">6-Hour Slow Burn Rate</span>
+            <span class="kpi-icon text-amber"><i class="bi bi-hourglass-split"></i></span>
+        </div>
+        <div class="kpi-value-row">
+            <span class="kpi-value text-amber" id="slo-burn-6h">{{ slo.burn_rate_6h }}x</span>
+            <span class="badge badge-outline-amber">Warn: &ge;6.0x</span>
+        </div>
+        <div class="kpi-subtext">
+            <span>Burns 5% of budget in 6 hours if sustained</span>
+        </div>
+    </div>
+</div>
+
+<!-- SRE Alert Matrix & Interactive Simulator -->
+<div class="dashboard-grid-row">
+    <!-- Google SRE Alert Matrix Table -->
+    <div class="glass-panel col-7">
+        <div class="panel-header">
+            <div class="panel-title">
+                <i class="bi bi-table text-cyan"></i>
+                <span>Multi-Window Multi-Burn-Rate Alerting Rules</span>
+            </div>
+        </div>
+        <div class="panel-body p-0">
+            <div class="table-responsive">
+                <table class="sre-table">
+                    <thead>
+                        <tr>
+                            <th>Severity</th>
+                            <th>Window</th>
+                            <th>Burn Rate Threshold</th>
+                            <th>Budget Consumed</th>
+                            <th>Action / Target</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="badge badge-crimson">P1 Pager</span></td>
+                            <td><strong>1 Hour (Short)</strong></td>
+                            <td><strong class="mono-text text-crimson">&ge; 14.4x</strong></td>
+                            <td>2% of 30-day budget</td>
+                            <td>Page On-Call SRE immediately</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge badge-amber">P2 Ticket</span></td>
+                            <td><strong>6 Hours (Medium)</strong></td>
+                            <td><strong class="mono-text text-amber">&ge; 6.0x</strong></td>
+                            <td>5% of 30-day budget</td>
+                            <td>Open high-priority Jira ticket & notify Slack</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge badge-amber">P3 Warning</span></td>
+                            <td><strong>3 Days (Long)</strong></td>
+                            <td><strong class="mono-text text-amber">&ge; 1.0x</strong></td>
+                            <td>10% of 30-day budget</td>
+                            <td>Review at weekly SRE reliability triage</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge badge-emerald">Nominal</span></td>
+                            <td><strong>30 Days</strong></td>
+                            <td><strong class="mono-text text-emerald">&lt; 1.0x</strong></td>
+                            <td>&le; 100% allowed</td>
+                            <td>Feature velocity authorized; no freezes</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Interactive Simulator -->
+    <div class="glass-panel col-5">
+        <div class="panel-header">
+            <div class="panel-title">
+                <i class="bi bi-calculator text-emerald"></i>
+                <span>Interactive Burn Rate Simulator</span>
+            </div>
+        </div>
+        <div class="panel-body">
+            <div class="simulator-form">
+                <div class="form-group mb-3">
+                    <label class="form-label">Hypothetical Error Rate (%)</label>
+                    <input type="range" class="sre-range" id="simErrorRateRange" min="0" max="2.0" step="0.01" value="0.05" oninput="runBurnSimulator()">
+                    <div class="range-val-row">
+                        <span>0.00%</span>
+                        <strong id="simErrorRateLabel" class="text-cyan">0.05%</strong>
+                        <span>2.00%</span>
+                    </div>
+                </div>
+
+                <div class="simulator-results-card">
+                    <div class="sim-row">
+                        <span>Resulting Burn Rate:</span>
+                        <strong id="simBurnRateVal" class="text-amber">0.50x</strong>
+                    </div>
+                    <div class="sim-row">
+                        <span>Projected Time to 100% Depletion:</span>
+                        <strong id="simDepletionVal" class="text-cyan">60.0 days</strong>
+                    </div>
+                    <div class="sim-row">
+                        <span>Alert Action Triggered:</span>
+                        <span id="simAlertBadge" class="badge badge-emerald">Safe / Normal</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function runBurnSimulator() {
+        const errorRatePercent = parseFloat(document.getElementById("simErrorRateRange").value);
+        document.getElementById("simErrorRateLabel").textContent = errorRatePercent.toFixed(2) + "%";
+
+        const allowedUnreliability = 0.001; // 0.1% for 99.9% SLO
+        const observedErrorRatio = errorRatePercent / 100.0;
+        const burnRate = observedErrorRatio / allowedUnreliability;
+
+        document.getElementById("simBurnRateVal").textContent = burnRate.toFixed(2) + "x";
+
+        // Time to depletion (30 days = 720 hours)
+        let depletionText = "> 90 days";
+        if (burnRate > 0.01) {
+            const hours = 720 / burnRate;
+            if (hours < 1) {
+                depletionText = Math.max(1, Math.round(hours * 60)) + " minutes";
+            } else if (hours < 48) {
+                depletionText = hours.toFixed(1) + " hours";
+            } else {
+                depletionText = (hours / 24).toFixed(1) + " days";
+            }
+        }
+        document.getElementById("simDepletionVal").textContent = depletionText;
+
+        // Alert badge
+        const badge = document.getElementById("simAlertBadge");
+        if (burnRate >= 14.4) {
+            badge.className = "badge badge-crimson";
+            badge.textContent = "CRITICAL PAGER (1h Alert)";
+        } else if (burnRate >= 6.0) {
+            badge.className = "badge badge-amber";
+            badge.textContent = "WARN TICKET (6h Alert)";
+        } else if (burnRate > 1.0) {
+            badge.className = "badge badge-soft-amber";
+            badge.textContent = "Elevated Burn";
+        } else {
+            badge.className = "badge badge-emerald";
+            badge.textContent = "Safe / Normal";
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", runBurnSimulator);
+</script>
+{% endblock %}

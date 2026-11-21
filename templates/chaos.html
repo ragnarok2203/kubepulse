@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}Chaos Control Plane | KubePulse SRE{% endblock %}
+{% block page_name %}Chaos Engineering Control Plane{% endblock %}
+
+{% block content %}
+<!-- Active Chaos Banner -->
+<div class="chaos-status-banner {% if active_chaos %}active{% else %}hidden{% endif %}" id="chaos-active-banner">
+    <div class="chaos-status-icon">
+        <i class="bi bi-radioactive"></i>
+    </div>
+    <div class="chaos-status-content">
+        <div class="chaos-status-title">
+            <span class="badge badge-crimson">CHAOS IN PROGRESS</span>
+            <strong id="active-chaos-title">{{ active_chaos.description if active_chaos else '' }}</strong>
+        </div>
+        <p class="chaos-status-desc">
+            Synthetic failure actively perturbing cluster telemetry. Error budget is burning.
+        </p>
+    </div>
+    <div class="chaos-status-action">
+        <button class="btn btn-crimson-glow" onclick="stopActiveChaos()">
+            <i class="bi bi-stop-circle-fill"></i> Abort Experiment
+        </button>
+    </div>
+</div>
+
+<!-- Chaos Overview Header -->
+<div class="glass-panel mb-4">
+    <div class="panel-header">
+        <div class="panel-title">
+            <i class="bi bi-shield-shaded text-amber"></i>
+            <span>Principles of Chaos Engineering (Cloud-Native Resiliency Testing)</span>
+        </div>
+    </div>
+    <div class="panel-body">
+        <p class="text-secondary mb-0">
+            Chaos experiments intentionally inject controlled faults into Kubernetes microservices to empirically verify that 
+            Google SRE burn rate monitors page the on-call engineer and that autonomous self-healing engines mitigate outages 
+            without human intervention.
+        </p>
+    </div>
+</div>
+
+<!-- 4 Chaos Experiment Cards Grid -->
+<div class="chaos-cards-grid">
+    <!-- Experiment 1: HTTP 500 Error Spike -->
+    <div class="chaos-card">
+        <div class="chaos-card-head">
+            <span class="chaos-icon text-crimson"><i class="bi bi-bug-fill"></i></span>
+            <div class="chaos-card-meta">
+                <span class="chaos-type-badge">FAULTS</span>
+                <strong class="chaos-card-title">HTTP 500 Error Surge</strong>
+            </div>
+        </div>
+        <p class="chaos-card-desc">
+            Simulates a buggy canary deployment throwing unhandled null pointer exceptions. Spikes 5xx rate and drives 1h burn rate &gt;14.4x.
+        </p>
+        <div class="chaos-controls-box">
+            <label class="form-label-xs">Target Microservice:</label>
+            <select class="sre-select-sm" id="chaos-service-error">
+                {% for svc in services %}
+                <option value="{{ svc }}" {% if svc == 'order-service' %}selected{% endif %}>{{ svc }}</option>
+                {% endfor %}
+            </select>
+            <button class="btn btn-sm btn-outline-crimson mt-3 w-100" onclick="injectChaos('error_spike', 'chaos-service-error')">
+                <i class="bi bi-lightning-fill"></i> Inject 500 Error Surge
+            </button>
+        </div>
+    </div>
+
+    <!-- Experiment 2: Synthetic Tail Latency -->
+    <div class="chaos-card">
+        <div class="chaos-card-head">
+            <span class="chaos-icon text-amber"><i class="bi bi-hourglass-top"></i></span>
+            <div class="chaos-card-meta">
+                <span class="chaos-type-badge">LATENCY</span>
+                <strong class="chaos-card-title">Tail Latency Packet Delay</strong>
+            </div>
+        </div>
+        <p class="chaos-card-desc">
+            Injects +450ms synthetic network transit latency. Simulates slow downstream database queries and causes P99 SLA violations.
+        </p>
+        <div class="chaos-controls-box">
+            <label class="form-label-xs">Target Microservice:</label>
+            <select class="sre-select-sm" id="chaos-service-latency">
+                {% for svc in services %}
+                <option value="{{ svc }}" {% if svc == 'database-proxy' %}selected{% endif %}>{{ svc }}</option>
+                {% endfor %}
+            </select>
+            <button class="btn btn-sm btn-outline-amber mt-3 w-100" onclick="injectChaos('latency', 'chaos-service-latency')">
+                <i class="bi bi-clock-history"></i> Inject +450ms Latency
+            </button>
+        </div>
+    </div>
+
+    <!-- Experiment 3: Kernel OOMKilled -->
+    <div class="chaos-card">
+        <div class="chaos-card-head">
+            <span class="chaos-icon text-purple"><i class="bi bi-memory"></i></span>
+            <div class="chaos-card-meta">
+                <span class="chaos-type-badge">RESOURCE EXHAUSTION</span>
+                <strong class="chaos-card-title">cgroup OOMKilled Leak</strong>
+            </div>
+        </div>
+        <p class="chaos-card-desc">
+            Forces a runaway heap memory leak exceeding Kubernetes container memory limits, triggering immediate Linux kernel OOMKills.
+        </p>
+        <div class="chaos-controls-box">
+            <label class="form-label-xs">Target Microservice:</label>
+            <select class="sre-select-sm" id="chaos-service-oom">
+                {% for svc in services %}
+                <option value="{{ svc }}" {% if svc == 'payment-gateway' %}selected{% endif %}>{{ svc }}</option>
+                {% endfor %}
+            </select>
+            <button class="btn btn-sm btn-outline-purple mt-3 w-100" onclick="injectChaos('oom_kill', 'chaos-service-oom')">
+                <i class="bi bi-fire"></i> Trigger OOMKilled Crash
+            </button>
+        </div>
+    </div>
+
+    <!-- Experiment 4: Pod Eviction / Node Spot Loss -->
+    <div class="chaos-card">
+        <div class="chaos-card-head">
+            <span class="chaos-icon text-cyan"><i class="bi bi-trash3-fill"></i></span>
+            <div class="chaos-card-meta">
+                <span class="chaos-type-badge">FAILURE SIMULATION</span>
+                <strong class="chaos-card-title">Pod Eviction / Chaos Monkey</strong>
+            </div>
+        </div>
+        <p class="chaos-card-desc">
+            Immediately terminates healthy pod replicas to benchmark Kubernetes ReplicaSet reschedule times and service ingress failover.
+        </p>
+        <div class="chaos-controls-box">
+            <label class="form-label-xs">Target Microservice:</label>
+            <select class="sre-select-sm" id="chaos-service-kill">
+                {% for svc in services %}
+                <option value="{{ svc }}" {% if svc == 'ingress-gateway' %}selected{% endif %}>{{ svc }}</option>
+                {% endfor %}
+            </select>
+            <button class="btn btn-sm btn-outline-cyan mt-3 w-100" onclick="injectChaos('pod_kill', 'chaos-service-kill')">
+                <i class="bi bi-x-octagon"></i> Evict Active Replicas
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function injectChaos(type, selectElementId) {
+        const target = document.getElementById(selectElementId).value;
+        showToast("Injecting chaos experiment: " + type + " on " + target + "...", "warning");
+
+        fetch("/api/chaos/inject", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                type: type,
+                target_service: target,
+                duration: 120,
+                latency_ms: 450.0
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            showToast("Chaos active: " + data.experiment.description, "error");
+            document.getElementById("chaos-active-banner").classList.remove("hidden");
+            document.getElementById("chaos-active-banner").classList.add("active");
+            document.getElementById("active-chaos-title").textContent = data.experiment.description;
+        })
+        .catch(err => {
+            showToast("Failed to launch chaos: " + err, "error");
+        });
+    }
+
+    function stopActiveChaos() {
+        showToast("Stopping active chaos experiment...", "info");
+        fetch("/api/chaos/stop", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"}
+        })
+        .then(res => res.json())
+        .then(data => {
+            showToast("Chaos terminated! Subsystems normalizing...", "success");
+            document.getElementById("chaos-active-banner").classList.add("hidden");
+            document.getElementById("chaos-active-banner").classList.remove("active");
+            setTimeout(() => window.location.reload(), 800);
+        })
+        .catch(err => {
+            showToast("Error stopping chaos: " + err, "error");
+        });
+    }
+</script>
+{% endblock %}

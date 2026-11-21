@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}KubePulse{% endblock %} | Autonomous Kubernetes SRE Platform</title>
+    
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    
+    <!-- Custom Cyber-SRE Styling -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="sre-dark-theme">
+    <!-- Main Shell -->
+    <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <a href="/dashboard" class="brand-link">
+                    <div class="brand-logo-hex">
+                        <i class="bi bi-cpu-fill"></i>
+                    </div>
+                    <div class="brand-meta">
+                        <span class="brand-title">KUBEPULSE</span>
+                        <span class="brand-sub">SRE ENGINE</span>
+                    </div>
+                </a>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section-label">OBSERVABILITY</div>
+                <a href="/dashboard" class="nav-item {% if page == 'dashboard' %}active{% endif %}">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>Mission Control</span>
+                </a>
+                <a href="/topology" class="nav-item {% if page == 'topology' %}active{% endif %}">
+                    <i class="bi bi-diagram-3"></i>
+                    <span>Cluster Topology</span>
+                </a>
+                <a href="/slo" class="nav-item {% if page == 'slo' %}active{% endif %}">
+                    <i class="bi bi-graph-up-arrow"></i>
+                    <span>SLO & Error Budget</span>
+                </a>
+                <a href="/traces" class="nav-item {% if page == 'traces' %}active{% endif %}">
+                    <i class="bi bi-water"></i>
+                    <span>OTel Tracing</span>
+                </a>
+
+                <div class="nav-section-label">AUTOMATION & CHAOS</div>
+                <a href="/incidents" class="nav-item {% if page == 'incidents' %}active{% endif %}">
+                    <i class="bi bi-shield-exclamation"></i>
+                    <span>Incidents & Self-Healing</span>
+                    <span class="badge-counter" id="sidebar-incident-badge">0</span>
+                </a>
+                <a href="/chaos" class="nav-item {% if page == 'chaos' %}active{% endif %}">
+                    <i class="bi bi-lightning-charge"></i>
+                    <span>Chaos Control Plane</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="cluster-status-card">
+                    <div class="cluster-status-header">
+                        <span class="pulse-dot green" id="cluster-pulse-dot"></span>
+                        <span class="cluster-status-title" id="cluster-mode-text">Autonomous Simulation</span>
+                    </div>
+                    <div class="cluster-meta-row">
+                        <span>Target SLO</span>
+                        <strong class="text-cyan">99.90%</strong>
+                    </div>
+                    <div class="cluster-meta-row">
+                        <span>30D Budget</span>
+                        <strong class="text-emerald" id="sidebar-budget-pct">85.5%</strong>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Workspace -->
+        <main class="main-content">
+            <!-- Top Telemetry Header -->
+            <header class="topbar">
+                <div class="topbar-left">
+                    <div class="breadcrumbs">
+                        <span class="crumb-root">KubePulse</span>
+                        <span class="crumb-sep">/</span>
+                        <span class="crumb-active">{% block page_name %}Mission Control{% endblock %}</span>
+                    </div>
+                </div>
+
+                <div class="topbar-right">
+                    <!-- Live Burn Rate Pill -->
+                    <div class="metric-pill" id="topbar-burnrate-pill">
+                        <i class="bi bi-fire text-amber"></i>
+                        <span>Burn Rate (1h):</span>
+                        <strong id="topbar-burnrate-val">0.28x</strong>
+                    </div>
+
+                    <!-- Latency P99 Pill -->
+                    <div class="metric-pill">
+                        <i class="bi bi-stopwatch text-cyan"></i>
+                        <span>P99:</span>
+                        <strong id="topbar-p99-val">112ms</strong>
+                    </div>
+
+                    <!-- Live Sync Indicator -->
+                    <div class="sync-indicator">
+                        <span class="sync-dot"></span>
+                        <span class="sync-text">LIVE SYNC</span>
+                    </div>
+
+                    <!-- Quick Self-Healing Action Button -->
+                    <button class="btn btn-sm btn-primary-glow" id="topbar-quick-heal-btn" onclick="executeQuickHeal()">
+                        <i class="bi bi-magic"></i> Auto-Remediate
+                    </button>
+                </div>
+            </header>
+
+            <!-- Page Body -->
+            <div class="content-body">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+
+    <!-- Notification Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Core Scripts -->
+    <script src="/static/js/app.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

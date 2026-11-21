@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | KubePulse SRE{% endblock %}
+{% block page_name %}Mission Control{% endblock %}
+
+{% block content %}
+<!-- Active Incident Banner (Dynamic) -->
+<div class="incident-banner {% if telemetry.active_chaos or telemetry.slo.burn_rate_1h >= 6.0 %}active{% else %}hidden{% endif %}" id="incident-live-banner">
+    <div class="incident-banner-icon">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+    </div>
+    <div class="incident-banner-content">
+        <div class="incident-banner-title">
+            <span class="badge badge-crimson" id="banner-severity">CRITICAL ALERT</span>
+            <strong id="banner-title">Error Budget Burn Rate Spike Detected</strong>
+        </div>
+        <p class="incident-banner-desc" id="banner-desc">
+            Excessive 5xx failures or latency breaches consuming rolling error budget. On-call notification triggered.
+        </p>
+    </div>
+    <div class="incident-banner-action">
+        <button class="btn btn-warning-glow" onclick="executeQuickHeal()">
+            <i class="bi bi-magic"></i> 1-Click Auto-Remediate
+        </button>
+    </div>
+</div>
+
+<!-- Primary SRE KPI Cards Grid -->
+<div class="kpi-grid">
+    <!-- Card 1: Cluster Health Score -->
+    <div class="kpi-card">
+        <div class="kpi-header">
+            <span class="kpi-title">Cluster Health</span>
+            <span class="kpi-icon text-cyan"><i class="bi bi-heart-pulse-fill"></i></span>
+        </div>
+        <div class="kpi-value-row">
+            <span class="kpi-value text-cyan" id="kpi-health-score">{{ overview.cluster_health_score }}%</span>
+            <span class="badge badge-emerald" id="kpi-health-badge">Nominal</span>
+        </div>
+        <div class="kpi-subtext">
+            <span>Ready Nodes: <strong id="kpi-ready-nodes">{{ overview.ready_nodes }}/{{ overview.total_nodes }}</strong></span>
+            <span>Active Pods: <strong id="kpi-active-pods">{{ overview.running_pods }}/{{ overview.total_pods }}</strong></span>
+        </div>
+        <div class="kpi-progress">
+            <div class="kpi-progress-bar cyan-bar" id="kpi-health-bar" style="width: {{ overview.cluster_health_score }}%;"></div>
+        </div>
+    </div>
+
+    <!-- Card 2: 30-Day Error Budget Remaining -->
+    <div class="kpi-card">
+        <div class="kpi-header">
+            <span class="kpi-title">30-Day Error Budget</span>
+            <span class="kpi-icon text-emerald"><i class="bi bi-pie-chart-fill"></i></span>
+        </div>
+        <div class="kpi-value-row">
+            <span class="kpi-value text-emerald" id="kpi-budget-remaining">{{ telemetry.slo.remaining_budget_percent }}%</span>
+            <span class="badge badge-outline-cyan">Target: 99.9%</span>
+        </div>
+        <div class="kpi-subtext">
+            <span>Depletion Time: <strong id="kpi-exhaust-time" class="text-amber">{{ telemetry.slo.time_to_exhaustion }}</strong></span>
+        </div>
+        <div class="kpi-progress">
+            <div class="kpi-progress-bar emerald-bar" id="kpi-budget-bar" style="width: {{ telemetry.slo.remaining_budget_percent }}%;"></div>
+        </div>
+    </div>
+
+    <!-- Card 3: Multi-Window Burn Rate -->
+    <div class="kpi-card">
+        <div class="kpi-header">
+            <span class="kpi-title">Burn Rate (Google SRE)</span>
+            <span class="kpi-icon text-amber"><i class="bi bi-fire"></i></span>
+        </div>
+        <div class="kpi-value-row">
+            <span class="kpi-value text-amber" id="kpi-burn-rate-1h">{{ telemetry.slo.burn_rate_1h }}x</span>
+            <span class="badge badge-soft-amber" id="kpi-burn-badge">1h Fast-Burn</span>
+        </div>
+        <div class="kpi-subtext">
+            <span>6h Slow-Burn: <strong id="kpi-burn-rate-6h">{{ telemetry.slo.burn_rate_6h }}x</strong> (Threshold: 6.0x)</span>
+        </div>
+        <div class="burn-threshold-legend">
+            <span>0x (Safe)</span>
+            <span>6x (Warn)</span>
+            <span>14.4x (Pager)</span>
+        </div>
+    </div>
+
+    <!-- Card 4: P99 Latency SLA -->
+    <div class="kpi-card">
+        <div class="kpi-header">
+            <span class="kpi-title">P99 Tail Latency</span>
+            <span class="kpi-icon text-purple"><i class="bi bi-speedometer"></i></span>
+        </div>
+        <div class="kpi-value-row">
+            <span class="kpi-value text-purple" id="kpi-p99-latency">{{ telemetry.slo.current_p99_ms }} ms</span>
+            <span class="badge badge-outline-purple">SLA: &lt;250ms</span>
+        </div>
+        <div class="kpi-subtext">
+            <span>P50: <strong id="kpi-p50-latency">{{ telemetry.percentiles.p50 }}ms</strong> | P95: <strong id="kpi-p95-latency">{{ telemetry.percentiles.p95 }}ms</strong></span>
+        </div>
+        <div class="kpi-progress">
+            <div class="kpi-progress-bar purple-bar" id="kpi-latency-bar" style="width: {{ (telemetry.slo.current_p99_ms / 250.0) * 100 }}%;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Middle Section: Node Matrix & Real-time Chart -->
+<div class="dashboard-grid-row">
+    <!-- Worker Nodes Matrix -->
+    <div class="glass-panel col-7">
+        <div class="panel-header">
+            <div class="panel-title">
+                <i class="bi bi-server text-cyan"></i>
+                <span>Kubernetes Worker Node Topology</span>
+            </div>
+            <a href="/topology" class="panel-link">View Full Mesh <i class="bi bi-arrow-right"></i></a>
+        </div>
+        <div class="panel-body">
+            <div class="node-cards-list" id="dashboard-node-list">
+                {% for node in telemetry.nodes %}
+                <div class="node-card">
+                    <div class="node-card-head">
+                        <div class="node-name">
+                            <span class="node-status-dot {{ 'green' if node.status == 'Ready' else 'red' }}"></span>
+                            <strong>{{ node.name }}</strong>
+                            <span class="node-zone">({{ node.zone }})</span>
+                        </div>
+                        <span class="badge badge-soft-cyan">{{ node.pod_count }} Pods</span>
+                    </div>
+                    <div class="node-metrics-bar-group">
+                        <div class="bar-metric">
+                            <div class="bar-label">
+                                <span>CPU Usage</span>
+                                <strong>{{ node.cpu_usage_percent }}%</strong>
+                            </div>
+                            <div class="metric-meter">
+                                <div class="meter-fill cyan-fill" style="width: {{ node.cpu_usage_percent }}%;"></div>
+                            </div>
+                        </div>
+                        <div class="bar-metric">
+                            <div class="bar-label">
+                                <span>Memory Usage</span>
+                                <strong>{{ node.memory_usage_percent }}%</strong>
+                            </div>
+                            <div class="metric-meter">
+                                <div class="meter-fill purple-fill" style="width: {{ node.memory_usage_percent }}%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Live Error Budget Sparkline & Controls -->
+    <div class="glass-panel col-5">
+        <div class="panel-header">
+            <div class="panel-title">
+                <i class="bi bi-activity text-amber"></i>
+                <span>Live Error Budget Burn Rate Pulse</span>
+            </div>
+            <span class="badge badge-soft-emerald">Streaming</span>
+        </div>
+        <div class="panel-body">
+            <div class="chart-container">
+                <canvas id="burnRateChart" width="450" height="200"></canvas>
+            </div>
+            <div class="chart-summary-row">
+                <div class="chart-stat">
+                    <span>Total Traffic</span>
+                    <strong id="stat-total-requests">{{ telemetry.slo.total_requests }} reqs</strong>
+                </div>
+                <div class="chart-stat">
+                    <span>5xx Errors</span>
+                    <strong id="stat-failed-requests" class="text-crimson">{{ telemetry.slo.failed_requests }}</strong>
+                </div>
+                <div class="chart-stat">
+                    <span>Error Rate</span>
+                    <strong id="stat-error-rate" class="text-amber">{{ telemetry.slo.instant_error_rate }}%</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bottom Section: OpenTelemetry Traces & Incidents Log -->
+<div class="dashboard-grid-row">
+    <!-- Recent Distributed Traces -->
+    <div class="glass-panel col-7">
+        <div class="panel-header">
+            <div class="panel-title">
+                <i class="bi bi-water text-purple"></i>
+                <span>Recent OpenTelemetry Distributed Traces</span>
+            </div>
+            <a href="/traces" class="panel-link">Explore Waterfall <i class="bi bi-arrow-right"></i></a>
+        </div>
+        <div class="panel-body p-0">
+            <div class="table-responsive">
+                <table class="sre-table">
+                    <thead>
+                        <tr>
+                            <th>Trace ID</th>
+                            <th>Entrypoint</th>
+                            <th>Duration</th>
+                            <th>Bottleneck Span</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dashboard-traces-tbody">
+                        {% for trace in traces %}
+                        <tr>
+                            <td>
+                                <a href="/traces?id={{ trace.trace_id }}" class="mono-link">
+                                    {{ trace.trace_id[:8] }}...{{ trace.trace_id[-4:] }}
+                                </a>
+                            </td>
+                            <td><span class="service-pill">{{ trace.root_service }}</span></td>
+                            <td><strong>{{ trace.total_duration_ms }} ms</strong></td>
+                            <td>
+                                <span class="badge badge-soft-amber">{{ trace.bottleneck_service }} ({{ trace.bottleneck_duration_ms }}ms)</span>
+                            </td>
+                            <td>
+                                {% if trace.status == 'OK' %}
+                                <span class="badge badge-emerald">200 OK</span>
+                                {% else %}
+                                <span class="badge badge-crimson">5xx ERROR</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active & Resolved SRE Incidents -->
+    <div class="glass-panel col-5">
+        <div class="panel-header">
+            <div class="panel-title">
+                <i class="bi bi-shield-check text-emerald"></i>
+                <span>SRE Incident Timeline</span>
+            </div>
+            <a href="/incidents" class="panel-link">View All <i class="bi bi-arrow-right"></i></a>
+        </div>
+        <div class="panel-body p-0">
+            <div class="incident-timeline-list" id="dashboard-incidents-list">
+                {% if incidents %}
+                    {% for inc in incidents %}
+                    <div class="incident-timeline-item {{ inc.status.lower() }}">
+                        <div class="incident-timeline-dot"></div>
+                        <div class="incident-timeline-content">
+                            <div class="incident-timeline-header">
+                                <span class="badge {{ 'badge-crimson' if inc.severity == 'CRITICAL' else 'badge-amber' }}">{{ inc.severity }}</span>
+                                <span class="incident-time">{{ inc.timestamp }}</span>
+                            </div>
+                            <strong class="incident-timeline-title">{{ inc.title }}</strong>
+                            <p class="incident-timeline-sub">{{ inc.rca.root_cause }}</p>
+                            {% if inc.status == 'ACTIVE' %}
+                            <button class="btn btn-xs btn-primary-glow mt-1" onclick="executeRemediation('{{ inc.id }}', 'AUTO')">
+                                <i class="bi bi-magic"></i> Self-Heal Now
+                            </button>
+                            {% else %}
+                            <div class="incident-resolved-tag">
+                                <i class="bi bi-check-circle-fill text-emerald"></i> Remediated via {{ inc.action_taken }}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty-state-card">
+                        <i class="bi bi-shield-check text-emerald"></i>
+                        <p>No active incidents. Cluster operational health is 100% nominal.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/charts.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // Initialize Burn Rate Chart
+        if (typeof initBurnRateChart === "function") {
+            initBurnRateChart("burnRateChart");
+        }
+    });
+</script>
+{% endblock %}

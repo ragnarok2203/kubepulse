@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  kubepulse-sre:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kubepulse-sre-engine
+    ports:
+      - "5050:5050"
+    environment:
+      - KUBEPULSE_PORT=5050
+      - KUBEPULSE_MODE=simulation
+      - SLO_AVAILABILITY_TARGET=99.9
+      - SLO_LATENCY_P99_TARGET_MS=250.0
+      - FLASK_DEBUG=False
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:5050/healthz')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - kubepulse-net
+
+networks:
+  kubepulse-net:
+    driver: bridge

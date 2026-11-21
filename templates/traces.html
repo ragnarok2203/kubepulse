@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}OpenTelemetry Tracing | KubePulse SRE{% endblock %}
+{% block page_name %}OpenTelemetry Traces{% endblock %}
+
+{% block content %}
+<!-- Latency Percentiles Bar -->
+<div class="kpi-grid mb-4">
+    <div class="kpi-card">
+        <div class="kpi-header"><span class="kpi-title">P50 Latency (Median)</span></div>
+        <div class="kpi-value-row"><span class="kpi-value text-cyan">{{ percentiles.p50 }} ms</span></div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-header"><span class="kpi-title">P90 Latency</span></div>
+        <div class="kpi-value-row"><span class="kpi-value text-emerald">{{ percentiles.p90 }} ms</span></div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-header"><span class="kpi-title">P95 Latency</span></div>
+        <div class="kpi-value-row"><span class="kpi-value text-amber">{{ percentiles.p95 }} ms</span></div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-header"><span class="kpi-title">P99 Latency (Tail SLA &lt;250ms)</span></div>
+        <div class="kpi-value-row"><span class="kpi-value {{ 'text-crimson' if percentiles.p99 > 250 else 'text-purple' }}">{{ percentiles.p99 }} ms</span></div>
+    </div>
+</div>
+
+<!-- Traces Master-Detail Layout -->
+<div class="dashboard-grid-row">
+    <!-- Trace Selector List -->
+    <div class="glass-panel col-4">
+        <div class="panel-header">
+            <div class="panel-title">
+                <i class="bi bi-list-nested text-cyan"></i>
+                <span>Distributed Traces ({{ traces|length }})</span>
+            </div>
+        </div>
+        <div class="panel-body p-0">
+            <div class="trace-nav-list">
+                {% for t in traces %}
+                <a href="/traces?id={{ t.trace_id }}" class="trace-nav-item {% if selected_trace and selected_trace.trace_id == t.trace_id %}active{% endif %}">
+                    <div class="trace-nav-head">
+                        <span class="mono-text">{{ t.trace_id[:8] }}...{{ t.trace_id[-4:] }}</span>
+                        <strong class="{{ 'text-crimson' if t.status == 'ERROR' else 'text-cyan' }}">{{ t.total_duration_ms }} ms</strong>
+                    </div>
+                    <div class="trace-nav-sub">
+                        <span>{{ t.root_service }}</span>
+                        <span class="badge {{ 'badge-crimson' if t.status == 'ERROR' else 'badge-emerald' }}">{{ t.status }}</span>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Trace Waterfall Detail View -->
+    <div class="glass-panel col-8">
+        {% if selected_trace %}
+        <div class="panel-header">
+            <div class="panel-title">
+                <i class="bi bi-water text-purple"></i>
+                <span>Waterfall View: <strong class="mono-text">{{ selected_trace.trace_id }}</strong></span>
+            </div>
+            <span class="badge {{ 'badge-crimson' if selected_trace.status == 'ERROR' else 'badge-emerald' }}">{{ selected_trace.status }}</span>
+        </div>
+        <div class="panel-body">
+            <!-- Trace Metadata Header -->
+            <div class="trace-meta-header-box mb-4">
+                <div class="meta-item">
+                    <span>Root Endpoint:</span>
+                    <strong>/api/v1/checkout</strong>
+                </div>
+                <div class="meta-item">
+                    <span>Total Duration:</span>
+                    <strong class="text-cyan">{{ selected_trace.total_duration_ms }} ms</strong>
+                </div>
+                <div class="meta-item">
+                    <span>Spans:</span>
+                    <strong>{{ selected_trace.span_count }} spans</strong>
+                </div>
+                <div class="meta-item">
+                    <span>Bottleneck Critical Path:</span>
+                    <span class="badge badge-amber">{{ selected_trace.bottleneck_service }} ({{ selected_trace.bottleneck_duration_ms }}ms)</span>
+                </div>
+            </div>
+
+            <!-- Waterfall Gantt Chart -->
+            <div class="waterfall-container">
+                <div class="waterfall-timeline-axis">
+                    <span>0ms</span>
+                    <span>{{ (selected_trace.total_duration_ms * 0.25)|round(1) }}ms</span>
+                    <span>{{ (selected_trace.total_duration_ms * 0.50)|round(1) }}ms</span>
+                    <span>{{ (selected_trace.total_duration_ms * 0.75)|round(1) }}ms</span>
+                    <span>{{ selected_trace.total_duration_ms }}ms</span>
+                </div>
+
+                <div class="waterfall-spans-list">
+                    {% for span in selected_trace.spans %}
+                    {% set left_pct = (span.start_offset_ms / selected_trace.total_duration_ms) * 100 %}
+                    {% set width_pct = (span.duration_ms / selected_trace.total_duration_ms) * 100 %}
+                    <div class="waterfall-span-row">
+                        <div class="span-info-col">
+                            <strong class="span-service-name">{{ span.service }}</strong>
+                            <span class="span-op-name mono-text">{{ span.operation }}</span>
+                        </div>
+                        <div class="span-gantt-col">
+                            <div class="span-bar-track">
+                                <div class="span-bar {{ 'error-bar' if span.status_code >= 400 else 'healthy-bar' }}" style="left: {{ left_pct }}%; width: {{ [width_pct, 4]|max }}%;">
+                                    <span class="span-bar-label">{{ span.duration_ms }}ms ({{ span.status_code }})</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="empty-state-card">
+            <i class="bi bi-water text-purple"></i>
+            <p>Select a trace from the left panel to view its distributed span waterfall.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

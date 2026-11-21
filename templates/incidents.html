@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}Incidents & Self-Healing | KubePulse SRE{% endblock %}
+{% block page_name %}Incidents & Self-Healing Engine{% endblock %}
+
+{% block content %}
+<!-- Incidents Summary Header -->
+<div class="kpi-grid mb-4">
+    <div class="kpi-card">
+        <div class="kpi-header"><span class="kpi-title">Active P1/P2 Incidents</span></div>
+        <div class="kpi-value-row">
+            <span class="kpi-value {{ 'text-crimson' if active_count > 0 else 'text-emerald' }}" id="incidents-active-kpi">{{ active_count }}</span>
+            <span class="badge {{ 'badge-crimson' if active_count > 0 else 'badge-emerald' }}">
+                {{ 'Action Required' if active_count > 0 else 'Nominal' }}
+            </span>
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-header"><span class="kpi-title">Mean Time to Remediate (MTTR)</span></div>
+        <div class="kpi-value-row">
+            <span class="kpi-value text-cyan">48.2 ms</span>
+            <span class="badge badge-outline-cyan">Autonomous Healer</span>
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-header"><span class="kpi-title">Auto-Remediation Success Rate</span></div>
+        <div class="kpi-value-row">
+            <span class="kpi-value text-emerald">100.0%</span>
+            <span class="badge badge-emerald">Zero Downtime</span>
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-header"><span class="kpi-title">Deployment Freeze Status</span></div>
+        <div class="kpi-value-row">
+            <span class="kpi-value text-purple">{{ 'ACTIVE' if active_count > 0 else 'UNRESTRICTED' }}</span>
+        </div>
+    </div>
+</div>
+
+<!-- Active Incidents Focus Section -->
+<div class="glass-panel mb-4">
+    <div class="panel-header">
+        <div class="panel-title">
+            <i class="bi bi-robot text-cyan"></i>
+            <span>Autonomous Self-Healing Remediation Console</span>
+        </div>
+        <span class="badge badge-soft-cyan">AI Root Cause Analysis (RCA)</span>
+    </div>
+    <div class="panel-body">
+        {% set active_incidents = incidents | selectattr('status', 'equalto', 'ACTIVE') | list %}
+        {% if active_incidents %}
+            {% for inc in active_incidents %}
+            <div class="active-incident-card mb-3" id="incident-card-{{ inc.id }}">
+                <div class="incident-card-head">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge {{ 'badge-crimson' if inc.severity == 'CRITICAL' else 'badge-amber' }}">{{ inc.severity }}</span>
+                        <strong class="mono-text">{{ inc.id }}</strong>
+                        <span>&bull;</span>
+                        <span class="service-pill">{{ inc.service }}</span>
+                        <span class="text-muted">({{ inc.timestamp }})</span>
+                    </div>
+                    <span class="badge badge-soft-crimson">Burn Rate: {{ inc.burn_rate }}x</span>
+                </div>
+                
+                <h4 class="incident-headline mt-2">{{ inc.title }}</h4>
+
+                <!-- AI RCA Box -->
+                <div class="ai-rca-box mt-3">
+                    <div class="rca-item">
+                        <span class="rca-label"><i class="bi bi-search text-cyan"></i> Identified Root Cause:</span>
+                        <p class="rca-text">{{ inc.rca.root_cause }}</p>
+                    </div>
+                    <div class="rca-item">
+                        <span class="rca-label"><i class="bi bi-graph-down-arrow text-crimson"></i> Error Budget Impact:</span>
+                        <p class="rca-text">{{ inc.rca.impact }}</p>
+                    </div>
+                    <div class="rca-item">
+                        <span class="rca-label"><i class="bi bi-lightbulb-fill text-amber"></i> Recommended Action:</span>
+                        <p class="rca-text text-amber">{{ inc.rca.recommended_action }}</p>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="remediation-btn-row mt-3">
+                    <button class="btn btn-primary-glow" onclick="executeRemediation('{{ inc.id }}', 'AUTO')">
+                        <i class="bi bi-magic"></i> Execute Auto-Remediation
+                    </button>
+                    <button class="btn btn-outline-cyan" onclick="executeRemediation('{{ inc.id }}', 'CANARY_ROLLBACK')">
+                        <i class="bi bi-arrow-counterclockwise"></i> Canary Rollback
+                    </button>
+                    <button class="btn btn-outline-amber" onclick="executeRemediation('{{ inc.id }}', 'POD_RESTART')">
+                        <i class="bi bi-arrow-clockwise"></i> Evict & Restart Pods
+                    </button>
+                    <button class="btn btn-outline-purple" onclick="executeRemediation('{{ inc.id }}', 'TUNE_MEMORY')">
+                        <i class="bi bi-memory"></i> Expand Memory (+50%)
+                    </button>
+                    <button class="btn btn-outline-emerald" onclick="executeRemediation('{{ inc.id }}', 'SCALE_OUT')">
+                        <i class="bi bi-plus-square"></i> Scale Out Replicas (+1)
+                    </button>
+                </div>
+
+                <!-- Remediation Execution Console -->
+                <div class="remediation-console mt-3 hidden" id="console-{{ inc.id }}">
+                    <div class="console-head">
+                        <i class="bi bi-terminal"></i> Remediation Execution Log
+                    </div>
+                    <div class="console-body" id="console-body-{{ inc.id }}">
+                        <!-- Steps injected dynamically via JS -->
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-state-card">
+                <i class="bi bi-shield-check text-emerald"></i>
+                <h3>All Cluster Subsystems Healthy</h3>
+                <p>No active P1/P2 incidents. Service Level Objectives are strictly within limits.</p>
+                <div class="mt-3">
+                    <a href="/chaos" class="btn btn-sm btn-outline-cyan">
+                        <i class="bi bi-lightning-charge"></i> Launch Chaos Experiment to Test Engine
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Historical Incidents Table -->
+<div class="glass-panel">
+    <div class="panel-header">
+        <div class="panel-title">
+            <i class="bi bi-clock-history text-purple"></i>
+            <span>Incident Audit Log & History</span>
+        </div>
+    </div>
+    <div class="panel-body p-0">
+        <div class="table-responsive">
+            <table class="sre-table">
+                <thead>
+                    <tr>
+                        <th>Incident ID</th>
+                        <th>Timestamp</th>
+                        <th>Target Service</th>
+                        <th>Severity</th>
+                        <th>Status</th>
+                        <th>Remediation Action</th>
+                    </tr>
+                </thead>
+                <tbody id="incidents-history-tbody">
+                    {% if incidents %}
+                        {% for inc in incidents %}
+                        <tr>
+                            <td><strong class="mono-text">{{ inc.id }}</strong></td>
+                            <td>{{ inc.timestamp }}</td>
+                            <td><span class="service-pill">{{ inc.service }}</span></td>
+                            <td>
+                                <span class="badge {{ 'badge-crimson' if inc.severity == 'CRITICAL' else 'badge-amber' }}">{{ inc.severity }}</span>
+                            </td>
+                            <td>
+                                {% if inc.status == 'ACTIVE' %}
+                                <span class="badge badge-crimson">ACTIVE</span>
+                                {% else %}
+                                <span class="badge badge-emerald">RESOLVED</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if inc.action_taken %}
+                                <span class="text-emerald"><i class="bi bi-check-circle-fill"></i> {{ inc.action_taken }}</span>
+                                {% else %}
+                                <span class="text-muted">Pending action...</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-muted">No historical incidents recorded yet.</td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

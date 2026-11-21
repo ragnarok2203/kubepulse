@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}Cluster Topology | KubePulse SRE{% endblock %}
+{% block page_name %}Cluster Topology{% endblock %}
+
+{% block content %}
+<!-- Topology Overview Banner -->
+<div class="glass-panel mb-4">
+    <div class="panel-header">
+        <div class="panel-title">
+            <i class="bi bi-diagram-3-fill text-cyan"></i>
+            <span>Interactive Kubernetes Mesh Topology</span>
+        </div>
+        <div class="panel-actions">
+            <button class="btn btn-sm btn-outline-secondary" onclick="resetTopologyZoom()">
+                <i class="bi bi-arrows-angle-contract"></i> Reset View
+            </button>
+            <span class="badge badge-soft-cyan">Dual Engine ({{ overview.mode }})</span>
+        </div>
+    </div>
+    <div class="panel-body p-0">
+        <div class="topology-canvas-wrapper">
+            <canvas id="topologyCanvas" width="1100" height="480"></canvas>
+            <div class="topology-legend">
+                <div class="legend-item"><span class="legend-dot cyan"></span> Node / Ingress</div>
+                <div class="legend-item"><span class="legend-dot emerald"></span> Healthy Pod (Running)</div>
+                <div class="legend-item"><span class="legend-dot crimson"></span> Failing Pod (OOM / Error)</div>
+                <div class="legend-item"><span class="legend-line"></span> Distributed Service Mesh</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Detailed Pod & Node Grid -->
+<div class="dashboard-grid-row">
+    <!-- Pod Inventory -->
+    <div class="glass-panel col-8">
+        <div class="panel-header">
+            <div class="panel-title">
+                <i class="bi bi-boxes text-emerald"></i>
+                <span>Microservice Pod Inventory ({{ pods|length }} Replicas Monitored)</span>
+            </div>
+            <div class="filter-group">
+                <input type="text" id="podSearchInput" class="sre-input-sm" placeholder="Filter pods..." onkeyup="filterPodsTable()">
+            </div>
+        </div>
+        <div class="panel-body p-0">
+            <div class="table-responsive">
+                <table class="sre-table" id="podsTable">
+                    <thead>
+                        <tr>
+                            <th>Pod Name</th>
+                            <th>Service</th>
+                            <th>Node</th>
+                            <th>Status</th>
+                            <th>Restarts</th>
+                            <th>CPU</th>
+                            <th>Memory / Limit</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pod in pods %}
+                        <tr class="pod-row" data-name="{{ pod.name }}" data-service="{{ pod.service }}">
+                            <td><strong class="mono-text">{{ pod.name }}</strong></td>
+                            <td><span class="service-pill">{{ pod.service }}</span></td>
+                            <td><span class="node-pill">{{ pod.node }}</span></td>
+                            <td>
+                                {% if pod.status == 'Running' %}
+                                <span class="badge badge-emerald"><i class="bi bi-check-circle"></i> Running</span>
+                                {% elif pod.status == 'OOMKilled' %}
+                                <span class="badge badge-crimson"><i class="bi bi-x-octagon"></i> OOMKilled</span>
+                                {% else %}
+                                <span class="badge badge-amber"><i class="bi bi-exclamation-circle"></i> {{ pod.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td><strong class="{{ 'text-crimson' if pod.restarts > 0 else '' }}">{{ pod.restarts }}</strong></td>
+                            <td>{{ pod.cpu_millicores }}m</td>
+                            <td>
+                                <div class="memory-meter-cell">
+                                    <span>{{ pod.memory_mib }} / {{ pod.memory_limit_mib }} MiB</span>
+                                    <div class="mini-meter">
+                                        <div class="mini-meter-fill {{ 'crimson-fill' if pod.memory_mib >= pod.memory_limit_mib else 'cyan-fill' }}" style="width: {{ (pod.memory_mib / pod.memory_limit_mib) * 100 }}%;"></div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <button class="btn btn-xs btn-outline-cyan" onclick="restartSinglePod('{{ pod.name }}')">
+                                    <i class="bi bi-arrow-clockwise"></i> Restart
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Node Architecture Specifications -->
+    <div class="glass-panel col-4">
+        <div class="panel-header">
+            <div class="panel-title">
+                <i class="bi bi-hdd-network text-purple"></i>
+                <span>Node Hardware Specs</span>
+            </div>
+        </div>
+        <div class="panel-body">
+            <div class="node-specs-container">
+                {% for node in nodes %}
+                <div class="node-spec-card">
+                    <div class="node-spec-head">
+                        <span class="node-status-dot green"></span>
+                        <strong>{{ node.name }}</strong>
+                        <span class="badge badge-outline-purple">{{ node.zone }}</span>
+                    </div>
+                    <ul class="spec-list">
+                        <li><span>vCPUs:</span> <strong>{{ node.cpu_cores }} Cores</strong></li>
+                        <li><span>RAM:</span> <strong>{{ node.memory_total_gib }} GiB</strong></li>
+                        <li><span>Kubelet:</span> <strong class="mono-text">{{ node.kubelet_version }}</strong></li>
+                        <li><span>OS Image:</span> <span>{{ node.os_image }}</span></li>
+                    </ul>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/topology.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        if (typeof initTopologyMesh === "function") {
+            initTopologyMesh("topologyCanvas");
+        }
+    });
+
+    function filterPodsTable() {
+        const query = document.getElementById("podSearchInput").value.toLowerCase();
+        const rows = document.querySelectorAll(".pod-row");
+        rows.forEach(r => {
+            const name = r.getAttribute("data-name").toLowerCase();
+            const service = r.getAttribute("data-service").toLowerCase();
+            r.style.display = (name.includes(query) || service.includes(query)) ? "" : "none";
+        });
+    }
+
+    function restartSinglePod(podName) {
+        showToast("Restarting pod: " + podName + "...", "info");
+        fetch("/api/heal", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({action: "POD_RESTART", pod_name: podName})
+        })
+        .then(res => res.json())
+        .then(data => {
+            showToast("Pod successfully restarted and health checked!", "success");
+            setTimeout(() => window.location.reload(), 1000);
+        })
+        .catch(err => {
+            showToast("Failed to restart pod: " + err, "error");
+        });
+    }
+</script>
+{% endblock %}
