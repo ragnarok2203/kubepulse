@@ -10,7 +10,20 @@ BASE_DIR = Path(__file__).resolve().parent
 
 class Config:
     """Application configuration parameters."""
-    SECRET_KEY = os.environ.get("SECRET_KEY", "kubepulse-sre-telemetry-secret-key-2026")
+    # Cryptographic Session & Telemetry Signing
+    _env_secret = os.environ.get("SECRET_KEY")
+    if _env_secret:
+        SECRET_KEY = _env_secret
+    elif os.environ.get("FLASK_ENV") == "production":
+        import secrets
+        SECRET_KEY = secrets.token_hex(32)
+    else:
+        SECRET_KEY = "kubepulse-sre-telemetry-secret-key-2026"
+
+    # Session & Cookie Security
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_SECURE = os.environ.get("FLASK_ENV") == "production" or os.environ.get("SESSION_COOKIE_SECURE", "False").lower() in ("true", "1")
     PORT = int(os.environ.get("KUBEPULSE_PORT", os.environ.get("PORT", 5050)))
     HOST = os.environ.get("KUBEPULSE_HOST", "0.0.0.0")
     DEBUG = os.environ.get("FLASK_DEBUG", "True").lower() in ("true", "1", "yes")
